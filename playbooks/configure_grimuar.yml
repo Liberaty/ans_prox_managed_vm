@@ -1,0 +1,16 @@
+# configure_grimuar.yml
+- name: Configure grimuar VM after provisioning
+  hosts: grimuar
+  become: true
+  gather_facts: true
+
+  pre_tasks:
+    - name: Wait for SSH to be available
+      ansible.builtin.wait_for:
+        port: 22
+        host: "{{ vm.ip }}"
+        timeout: 180
+        state: started
+
+  roles:
+    - base_config

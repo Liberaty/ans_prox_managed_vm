@@ -1,0 +1,70 @@
+- name: Create and convert a VM into cloud-init template on Proxmox
+  hosts: localhost # подключение по API
+  connection: local
+  gather_facts: false
+
+  vars_files:
+    - ../vault/vault_proxmox.yml # Секреты Proxmox VE
+    - ../vault/vault_grim.yml # Секреты VM grimuar
+    - ../group_vars/grimuar.yml # Данные VM
+
+  # Создаём VM под шаблон
+  tasks:
+    - name: Create VM with cloud-init enabled
+      community.general.proxmox_kvm:
+        api_user: "{{ proxmox_api_user }}"
+        api_password: "{{ proxmox_api_password }}"
+        api_host: "{{ proxmox_api_host }}"
+        node: "{{ proxmox_node }}"
+        # Данные шаблона VM
+        vmid: 9000
+        name: "cloudinit-ubuntu-template"
+        acpi: true
+        machine: q35
+        sockets: "{{ vm.socket }}"
+        cores: "{{ vm.cores }}"
+        memory: "{{ vm.memory }}"
+        #
+        kvm: true
+        # Указание параметров BIOS
+        bios: ovmf
+        efidisk0:
+          storage: local-zfs
+          format: raw
+          efitype: 4m
+          pre_enrolled_keys: true
+        # Подключение сети через virtio
+        net:
+          net0: virtio,bridge=vmbr0
+        # Добавляем cloud-init диск
+        ide:
+          ide0: local:cloudinit
+         # Используем SCSI-диск вместо SATA
+        scsihw: virtio-scsi-pci
+        scsi:
+          scsi0: local-zfs:60,format=raw
+        # ISO-диск для установки
+        sata:
+          sata0: local:iso/ubuntu-24.04.1-live-server-amd64.iso,media=cdrom
+        # Точное указание OS
+        ostype: l26
+        citype: nocloud
+        startdate: now
+        # С какого диска грузится
+        boot: order=scsi0;net0;
+        bootdisk: scsi0
+        # Данные УЗ
+        ciuser: "{{ grimuar_vm_user }}"
+        cipassword: "{{ grimuar_vm_password }}"  # если понадобится
+        sshkeys: "{{ grimuar_vm_ssh_public_key }}"
+        state: present
+
+    - name: Convert VM to template
+      community.general.proxmox_kvm:
+        api_user: "{{ proxmox_api_user }}"
+        api_password: "{{ proxmox_api_password }}"
+        api_host: "{{ proxmox_api_host }}"
+        node: "{{ proxmox_node }}"
+        vmid: 9000
+        template: true
+        state: present

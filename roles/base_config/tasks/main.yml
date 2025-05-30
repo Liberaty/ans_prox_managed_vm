@@ -1,0 +1,51 @@
+- name: Ensure apt cache is updated
+  ansible.builtin.apt:
+    update_cache: true
+
+- name: Install basic tools
+  ansible.builtin.apt:
+    name:
+      - sudo
+      - curl
+      - wget
+      - vim
+      - git
+      - htop
+      - net-tools
+      - traceroute
+      - tree
+      - lsd
+      - ufw
+      - gnupg
+      - ca-certificates
+    state: present
+    force_apt_get: true
+
+- name: Disable password login and enforce SSH key auth
+  ansible.builtin.lineinfile:
+    path: /etc/ssh/sshd_config
+    regexp: '^PasswordAuthentication'
+    line: 'PasswordAuthentication no'
+    state: present
+
+- name: Disable root login
+  ansible.builtin.lineinfile:
+    path: /etc/ssh/sshd_config
+    regexp: '^PermitRootLogin'
+    line: 'PermitRootLogin no'
+    state: present
+
+- name: Restart SSH
+  ansible.builtin.service:
+    name: ssh
+    state: restarted
+
+- name: Allow SSH through UFW
+  community.general.ufw:
+    rule: allow
+    name: OpenSSH
+
+- name: Enable UFW
+  community.general.ufw:
+    state: enabled
+    policy: deny

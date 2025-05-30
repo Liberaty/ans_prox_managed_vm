@@ -1,0 +1,13 @@
+- name: Debug vault variables
+  hosts: localhost
+  gather_facts: false
+  vars_files:
+    - ../vault/vault_proxmox.yml
+  tasks:
+    - name: Show Proxmox variables
+      ansible.builtin.debug:
+        msg: |
+          user: {{ proxmox_api_user }}
+          pass: {{ proxmox_api_password }}
+          host: {{ proxmox_api_host }}
+          node: {{ proxmox_node }}
