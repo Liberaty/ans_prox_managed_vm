@@ -32,6 +32,6 @@
         net:
           net0: virtio,bridge=vmbr0
         ipconfig:
-          ipconfig0: ip={{ vm.ip }}/24,gw={{ vm.gw }}
+          ipconfig0: 'ip={{ vm.ip }}/24,gw={{ vm.gw }}'
         nameservers: "{{ vm.dns }}"
         state: present
