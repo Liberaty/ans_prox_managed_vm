@@ -1,5 +1,6 @@
 - name: Create grimuar VM on Proxmox
   hosts: localhost
+  connection: local
   gather_facts: false # не нужно собирать факты на localhost
 
   vars_files:
@@ -14,10 +15,12 @@
         api_password: "{{ proxmox_api_password }}"
         api_host: "{{ proxmox_api_host }}"
         node: "{{ proxmox_node }}"
-        vmid: "{{ vm.id }}"
-        name: "{{ vm.name }}"
         clone: cloudinit-ubuntu-template
+        vmid: 9000
+        newid: 106
         full: true
+        force: true
+        name: "{{ vm.name }}"
         cores: "{{ vm.cores }}"
         memory: "{{ vm.memory }}"
         scsihw: virtio-scsi-pci  # Обязательно для SCSI-диска!
@@ -29,6 +32,6 @@
         net:
           net0: virtio,bridge=vmbr0
         ipconfig:
-          ipconfig0: ip="{{ vm.ip }}"/24,gw="{{ vm.gw }}""
+          ipconfig0: ip={{ vm.ip }}/24,gw={{ vm.gw }}
         nameservers: "{{ vm.dns }}"
         state: present
