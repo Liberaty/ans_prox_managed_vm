@@ -1,0 +1,112 @@
+- name: Clone a VM from cloud-init template and configure it
+  hosts: localhost
+  connection: local
+  gather_facts: false
+
+  vars_files:
+    - ../vault/vault_proxmox.yml # Секреты Proxmox API
+    - ../vault/vault_vm.yml # Секреты новой VM
+    - ../group_vars/work_vm.yml  # данные по новой ВМ
+
+  tasks:
+    - name: Generate VM name
+      set_fact:
+        vm_name: "{{ work_vm.type }}-{{ work_vm.destination }}-{{ work_vm.name }}-{{ work_vm.count }}"
+
+    - name: Clone VM from template
+      community.general.proxmox_kvm:
+        api_user: "{{ proxmox_api_user }}"
+        api_password: "{{ proxmox_api_password }}"
+        api_host: "{{ proxmox_api_host }}"
+        node: "{{ proxmox_node }}"
+        clone: cloudinit-ubuntu-2404
+        vmid: "{{ work_vm.vmid_template }}"
+        newid: "{{ work_vm.vmid_new_vm }}"
+        name: "{{ vm_name }}"
+        memory: "{{ work_vm.memory }}"
+        sockets: "{{ work_vm.sockets }}"
+        cores: "{{ work_vm.cores }}"
+        scsihw: virtio-scsi-pci
+        net:
+          net0: virtio,bridge=vmbr0
+        ipconfig:
+          ipconfig0: "ip={{ work_vm.ip }}/{{ work_vm.netmask }},gw={{ work_vm.gateway }}"
+        nameservers: "{{ work_vm.gateway }}"
+        ciuser: "{{ vm_user }}"
+        cipassword: "{{ vm_password }}"
+        sshkeys: "{{ vm_ssh_public_key }}"
+        onboot: true
+        agent: enabled=1
+        boot: order=scsi0;net0;
+        timeout: 180
+        state: present
+    
+    - name: Set hostname for VM via qm set
+      ansible.builtin.command: >
+        qm set {{ work_vm.vmid_new_vm }} -hostname {{ vm_name }}
+      delegate_to: "{{ proxmox_node }}"
+
+    - name: Reset cloud-init config for VM
+      ansible.builtin.command: >
+        qm cloudinit reset {{ work_vm.vmid_new_vm }}
+      delegate_to: "{{ proxmox_node }}"
+    
+    - name: Start the new VM
+      community.general.proxmox_kvm:
+        api_user: "{{ proxmox_api_user }}"
+        api_password: "{{ proxmox_api_password }}"
+        api_host: "{{ proxmox_api_host }}"
+        node: "{{ proxmox_node }}"
+        vmid: "{{ work_vm.vmid_new_vm }}"
+        state: started
+    
+    - name: Wait for SSH to become available
+      wait_for:
+        host: "{{ work_vm.ip }}"
+        port: 22
+        timeout: 180
+        state: started
+    
+    - name: Ping VM by IP to check availability
+      wait_for:
+        host: "{{ work_vm.ip }}"
+        port: 22
+        timeout: 5
+        state: started
+      register: ssh_ready
+    
+    - name: Report if VM is reachable
+      debug:
+        msg: >-
+          {{ vm_name }} доступна по сети (IP: {{ work_vm.ip }})
+      when: ssh_ready is succeeded
+    
+    - name: Warn if VM is not reachable
+      debug:
+        msg: >-
+          {{ vm_name }} недоступна по сети (IP: {{ work_vm.ip }}), проверь настройки сети или cloud-init
+      when: ssh_ready is failed
+    
+    - name: Check actual hostname inside the VM
+      ansible.builtin.shell: hostname
+      register: actual_hostname
+      delegate_to: "{{ work_vm.ip }}"
+      become: false
+      when: ssh_ready is succeeded
+    
+    - name: Ensure hostname matches expected value
+      ansible.builtin.assert:
+        that:
+          - actual_hostname.stdout == vm_name
+        fail_msg: "⚠️  Hostname внутри ВМ не совпадает: ожидалось {{ vm_name }}, а получено {{ actual_hostname.stdout }}"
+        success_msg: "✅ Hostname внутри ВМ успешно установлен как {{ vm_name }}"
+      when: ssh_ready is succeeded
+
+    - name: Update inventory file (hosts.yml)
+      blockinfile:
+        path: ../inventory/hosts.yml
+        marker: "# {mark} ANSIBLE MANAGED HOST ENTRY FOR {{ vm_name }}"
+        insertafter: "vm_group:"
+        block: |
+          {{ work_vm.name }}:
+            ansible_host: {{ work_vm.ip }}

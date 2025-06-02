@@ -1,0 +1,49 @@
+- name: Create a VM on Proxmox for future cloud-init template
+  hosts: localhost
+  connection: local
+  gather_facts: false
+
+  vars_files:
+    - ../vault/vault_proxmox.yml
+    - ../vault/vault_vm.yml
+    - ../group_vars/template_vm_ubuntu.yml
+
+  tasks:
+    - name: Create base VM with cloud-init support (Ubuntu 24.04)
+      community.general.proxmox_kvm:
+        api_user: "{{ proxmox_api_user }}"
+        api_password: "{{ proxmox_api_password }}"
+        api_host: "{{ proxmox_api_host }}"
+        node: "{{ proxmox_node }}"
+        vmid: 9000
+        name: "cloudinit-ubuntu-2404"
+        memory: 4096
+        sockets: 1
+        cores: 2
+        kvm: true
+        bios: ovmf
+        machine: q35
+        efidisk0:
+          storage: local-zfs
+          format: raw
+          efitype: 4m
+          pre_enrolled_keys: true
+        net:
+          net0: virtio,bridge=vmbr0
+        ide:
+          ide0: local-zfs:cloudinit
+        scsihw: virtio-scsi-pci
+        scsi:
+          scsi0: local-zfs:60,format=raw
+        sata:
+          sata0: local:iso/ubuntu-24.04.1-live-server-amd64.iso,media=cdrom
+        ostype: l26
+        citype: nocloud
+        agent: enabled=1,fstrim_cloned_disks=1
+        boot: order=scsi0;net0;
+        bootdisk: scsi0
+        onboot: true
+        ciuser: "{{ vm_user }}"
+        cipassword: "{{ vm_password }}"
+        sshkeys: "{{ vm_ssh_public_key }}"
+        state: present

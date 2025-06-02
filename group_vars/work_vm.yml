@@ -1,0 +1,13 @@
+work_vm:
+  type: vm
+  destination: hobby
+  name: grimuar
+  count: 01
+  vmid_template: 9000
+  vmid_new_vm: 106
+  ip: 192.168.1.150
+  netmask: 24
+  gateway: 192.168.1.1
+  memory: 4096
+  sockets: 1
+  cores: 2
